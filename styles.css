@@ -79,9 +79,9 @@ h2 { font-size: 18px; margin: 0; }
 .toggles { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
 .toggles label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.layout { max-width: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .map-wrap { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px; }
-#map { width: 100%; height: auto; display: block; }
+#map { width: 100%; height: auto; max-height: calc(100vh - 32px); display: block; margin: 0 auto; }
 #map .state { stroke: var(--state-stroke); stroke-width: 0.8; cursor: pointer; }
 #map .state.nodata { fill: var(--nodata); }
 #map .state:hover, #map .state.sel { stroke: var(--hover); stroke-width: 1.6; }
@@ -90,6 +90,14 @@ h2 { font-size: 18px; margin: 0; }
 #map .dot.issuer { fill: var(--issuer); }
 #map .dot:hover, #map .dot.sel { stroke: var(--hover); stroke-width: 2; fill-opacity: 1; }
 #map .hidden { display: none; }
+#map .inset-frame { fill: var(--surface); stroke: var(--text-2); stroke-width: 1; }
+#map .inset-src { fill: none; stroke: var(--text-2); stroke-width: 1; }
+#map .inset-link { stroke: var(--text-2); stroke-width: 0.8; stroke-dasharray: 3 2; }
+#map .inset-title { font-size: 11px; font-weight: 600; fill: var(--text); }
+#map .inset-label { font-size: 9px; fill: var(--text-2); pointer-events: none; }
+#map .inset-leader { stroke: var(--muted); stroke-width: 0.8; }
+#map .inset-pin { fill: var(--text-2); pointer-events: none; }
+#map .inset-frame, #map .inset-src, #map .inset-link, #map .inset-title, #map .inset-leader { pointer-events: none; }
 
 .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; font-size: 12px; color: var(--text-2); padding: 6px 8px 4px; }
 .legend .ramp { display: inline-flex; align-items: center; gap: 2px; }
@@ -111,7 +119,13 @@ h2 { font-size: 18px; margin: 0; }
 .tooltip b { display: block; }
 .tooltip span { color: var(--text-2); }
 
-.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; position: sticky; top: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; max-width: 1240px; width: 100%; margin: 0 auto; scroll-margin: 16px; }
+@media (min-width: 861px) {
+  .panel:has(dl) { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); column-gap: 28px; }
+  .panel:has(dl) > :not(dl) { grid-column: 1; }
+  .panel:has(dl) > dl { grid-column: 2; grid-row: 1 / span 6; align-self: start; }
+  .panel:has(dl) > .notes, .panel:has(dl) > .more { grid-column: 1 / -1; }
+}
 .panel-empty { color: var(--muted); margin: 0; }
 .panel .kind { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); }
 .panel h3 { margin: 2px 0 10px; font-size: 20px; line-height: 1.25; }
@@ -151,8 +165,6 @@ td .na { color: var(--muted); }
 .foot { color: var(--text-2); font-size: 13px; margin-top: 28px; padding-bottom: 40px; }
 
 @media (max-width: 860px) {
-  .layout { grid-template-columns: 1fr; }
-  .panel { position: static; }
   h1 { font-size: 24px; }
   .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .stat { min-width: 0; padding: 8px 10px; }
