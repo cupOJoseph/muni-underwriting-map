@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Muni Underwriting Fee Map</title>
+  <meta name="description" content="What every US state, major city and big public issuer paid in underwriters' discount on its latest municipal bond offering.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Muni Underwriting Fee Map</h1>
+    <p class="lede">What each state, major city and big issuer paid Wall Street to underwrite its most recent municipal bond deal (the <em>underwriters' discount</em>). Click a state, city or issuer to see the deal and the source document.</p>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <section class="controls" aria-label="Map controls">
+    <div class="seg" role="radiogroup" aria-label="Color by">
+      <span class="seg-label">Color by</span>
+      <button role="radio" aria-checked="true" data-metric="fee">Total fee ($)</button>
+      <button role="radio" aria-checked="false" data-metric="rate">Per $1,000 borrowed</button>
+    </div>
+    <div class="toggles" aria-label="Layers">
+      <label><input type="checkbox" data-layer="states" checked> States</label>
+      <label><input type="checkbox" data-layer="cities" checked> Cities</label>
+      <label><input type="checkbox" data-layer="issuers" checked> Other big issuers</label>
+    </div>
+  </section>
+
+  <main class="layout">
+    <div class="map-wrap">
+      <svg id="map" viewBox="0 0 975 610" role="img" aria-label="Map of the United States colored by underwriting fee"></svg>
+      <div class="legend" id="legend"></div>
+      <div class="tooltip" id="tooltip" hidden></div>
+    </div>
+    <aside class="panel" id="panel" aria-live="polite">
+      <p class="panel-empty">Select a state, city or issuer on the map or in the table.</p>
+    </aside>
+  </main>
+
+  <section class="table-section">
+    <div class="table-head">
+      <h2>All issuers</h2>
+      <div class="table-tools">
+        <input type="search" id="search" placeholder="Search issuer, state, underwriter" aria-label="Search">
+        <select id="kind" aria-label="Filter by type">
+          <option value="all">All types</option>
+          <option value="state">States</option>
+          <option value="city">Cities</option>
+          <option value="issuer">Other issuers</option>
+        </select>
+        <a class="dl" href="data/issuers.csv" download>Download CSV</a>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table id="table">
+        <thead>
+          <tr>
+            <th data-sort="name">Issuer</th>
+            <th data-sort="kind">Type</th>
+            <th data-sort="state">State</th>
+            <th data-sort="sale_date">Sale date</th>
+            <th data-sort="par_amount" class="num">Par amount</th>
+            <th data-sort="underwriter_discount" class="num">Underwriting fee</th>
+            <th data-sort="rate" class="num">Per $1,000</th>
+            <th data-sort="sale_method">Method</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p><strong>How to read this.</strong> The underwriters' discount is the spread a bank keeps when it buys a bond issue from the issuer and resells it to investors. Figures come from each deal's official statement, sale results or a state/agency debt report, linked in every row. "Medium" confidence means the fee was computed from the purchase price or taken from a secondary report. Negotiated deals usually cost more per $1,000 than competitive sales. Research compiled November 2026; this is informational, not investment advice.</p>
+    <p>Map shapes: <a href="https://github.com/topojson/us-atlas">us-atlas</a> (US Census). Code: <a href="https://github.com/cupOJoseph/muni-underwriting-map">GitHub</a>.</p>
+  </footer>
+
+  <script src="vendor/d3-array.min.js"></script>
+  <script src="vendor/d3-geo.min.js"></script>
+  <script src="vendor/topojson-client.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
