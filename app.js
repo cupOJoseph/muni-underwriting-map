@@ -20,6 +20,17 @@
   };
   const SEQ = ["--seq-1", "--seq-2", "--seq-3", "--seq-4", "--seq-5", "--seq-6"];
 
+  // Zoomed "New York City area" box. Coordinates are in the main map's viewBox units.
+  const INSET = {
+    frame: { x: 890, y: 226, w: 212, h: 212 },       // the box drawn on the map
+    region: { x: 860, y: 207, w: 19, h: 17 },    // the patch of the main map it magnifies
+    title: "New York City area"
+  };
+  const SHORT = {
+    "city-new-york-ny": "NYC", "issuer-ny-mta": "MTA", "issuer-port-authority-nynj": "Port Authority",
+    "issuer-nyc-tfa": "NYC TFA", "issuer-nj-turnpike": "NJ Turnpike", "issuer-jfk-new-terminal-one": "JFK Terminal One"
+  };
+
   const svgNS = "http://www.w3.org/2000/svg";
   const $ = (s) => document.querySelector(s);
   const state = { metric: "fee", selected: null, sort: { key: "underwriter_discount", dir: -1 } };
@@ -76,14 +87,16 @@
     const features = topojson.feature(us, us.objects.states).features;
     for (const f of features) {
       const code = FIPS[f.id];
-      const p = el("path", { d: path(f), class: "state", "data-code": code });
+      // stroke/fill set inline too: the zoomed NYC box re-uses these paths via <use>,
+      // where page CSS selectors don't reach
+      const p = el("path", { d: path(f), class: "state", "data-code": code, stroke: "var(--state-stroke)", "stroke-width": 0.8, "vector-effect": "non-scaling-stroke" });
       p.__code = code;
       p.__name = f.properties.name;
       gStates.append(p);
     }
     const borders = el("path", {
       d: path(topojson.mesh(us, us.objects.states, (a, b) => a !== b)),
-      fill: "none", stroke: "var(--state-stroke)", "stroke-width": 0.6, "pointer-events": "none"
+      fill: "none", stroke: "var(--state-stroke)", "stroke-width": 0.6, "pointer-events": "none", "vector-effect": "non-scaling-stroke"
     });
     gStates.append(borders);
 
@@ -97,10 +110,119 @@
       shape.__rec = r;
       gDots.append(shape);
     }
+    drawInset(svg, gDots);
 
     svg.addEventListener("mousemove", onHover);
     svg.addEventListener("mouseleave", () => ($("#tooltip").hidden = true));
     svg.addEventListener("click", onClick);
+  }
+
+  // ---------- NYC inset ----------
+  function insetTitleH() { return 22; }
+  function regionToFrame([x, y]) {
+    const { frame: f, region: g } = INSET;
+    const k = Math.min(f.w / g.w, (f.h - insetTitleH()) / g.h);
+    const ox = f.x + (f.w - g.w * k) / 2, oy = f.y + insetTitleH() + (f.h - insetTitleH() - g.h * k) / 2;
+    return [ox + (x - g.x) * k, oy + (y - g.y) * k];
+  }
+
+  function drawInset(svg, gDots) {
+    const { frame: f, region: g } = INSET;
+    const inRegion = Array.from(gDots.children).filter((d) => {
+      const [x, y] = d.__xy;
+      return x >= g.x && x <= g.x + g.w && y >= g.y && y <= g.y + g.h;
+    });
+    if (!inRegion.length) return;
+
+    const root = el("g", { id: "inset" });
+    // outline of the magnified patch on the main map + connector to the box
+    root.append(
+      el("rect", { class: "inset-src", x: g.x, y: g.y, width: g.w, height: g.h }),
+      el("line", { class: "inset-link", x1: g.x + g.w, y1: g.y + g.h / 2, x2: f.x, y2: f.y + f.h / 2 }),
+      el("rect", { class: "inset-frame", x: f.x, y: f.y, width: f.w, height: f.h, rx: 6 })
+    );
+    const title = el("text", { class: "inset-title", x: f.x + 8, y: f.y + 15 });
+    title.textContent = INSET.title;
+    root.append(title);
+
+    // the magnified map: re-use the state shapes through a zoomed nested <svg>
+    const [ax, ay] = regionToFrame([g.x, g.y]);
+    const [bx, by] = regionToFrame([g.x + g.w, g.y + g.h]);
+    const view = el("svg", { x: ax, y: ay, width: bx - ax, height: by - ay, viewBox: `${g.x} ${g.y} ${g.w} ${g.h}`, "pointer-events": "none" });
+    view.append(el("use", { href: "#states" }));
+    root.append(view);
+
+    const gLinks = el("g", { class: "inset-links" });
+    const gMarks = el("g", { class: "inset-marks" });
+    root.append(gLinks, gMarks);
+    for (const src of inRegion) {
+      const r = src.__rec;
+      const home = regionToFrame(src.__xy);
+      const pin = el("circle", { class: "inset-pin", cx: home[0], cy: home[1], r: 1.6 });
+      const leader = el("line", { class: "inset-leader", x1: home[0], y1: home[1] });
+      const mark = el(src.tagName, { class: src.getAttribute("class") + " inset-dot", "data-id": r.id });
+      const label = el("text", { class: "inset-label", "text-anchor": "middle" });
+      label.textContent = SHORT[r.id] || r.name.replace(/\s*\(.*$/, "");
+      Object.assign(mark, { __rec: r, __home: home, __pin: pin, __leader: leader, __label: label });
+      gLinks.append(leader, pin);
+      gMarks.append(mark, label);
+    }
+    svg.append(root);
+  }
+
+  // Spread the inset markers apart (their real positions are often a few hundred
+  // metres from each other) and keep them, with labels, inside the box.
+  function layoutInset() {
+    const marks = Array.from(document.querySelectorAll("#inset .inset-dot")).filter((m) => !m.classList.contains("hidden"));
+    const { frame: f } = INSET;
+    const pad = 4, top = f.y + insetTitleH(), labelH = 11;
+    const nodes = marks.map((m, i) => {
+      const lw = m.__label.textContent.length * 5.2;
+      const w = Math.max(m.__r * 2.5, lw) + pad, h = m.__r * 2.5 + labelH + pad;
+      // tiny deterministic nudge so identical positions can separate
+      return { m, w, h, x: m.__home[0] + Math.cos(i * 2.4) * 0.5, y: m.__home[1] + Math.sin(i * 2.4) * 0.5 };
+    });
+    for (let it = 0; it < 300; it++) {
+      let moved = false;
+      for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const ox = (a.w + b.w) / 2 - Math.abs(a.x - b.x), oy = (a.h + b.h) / 2 - Math.abs(a.y - b.y);
+        if (ox <= 0 || oy <= 0) continue;
+        moved = true;
+        if (ox < oy) { const s = (a.x < b.x ? -1 : 1) * ox / 2; a.x += s; b.x -= s; }
+        else { const s = (a.y < b.y ? -1 : 1) * oy / 2; a.y += s; b.y -= s; }
+      }
+      for (const n of nodes) {   // gentle pull home, then clamp inside the box
+        n.x += (n.m.__home[0] - n.x) * 0.02; n.y += (n.m.__home[1] - n.y) * 0.02;
+        n.x = Math.min(Math.max(n.x, f.x + n.w / 2 + 2), f.x + f.w - n.w / 2 - 2);
+        n.y = Math.min(Math.max(n.y, top + n.h / 2), f.y + f.h - n.h / 2 - 2);
+      }
+      if (!moved && it > 20) break;
+    }
+    for (const n of nodes) {
+      const cx = n.x, cy = n.y - labelH / 2;     // marker sits above its label
+      placeDot(n.m, cx, cy, n.m.__r);
+      n.m.__label.setAttribute("x", cx);
+      // diamonds are rotated squares, so they reach ~1.2x further down than a circle
+      n.m.__label.setAttribute("y", cy + n.m.__r * (n.m.tagName === "rect" ? 1.25 : 1) + 9);
+      n.m.__leader.setAttribute("x2", cx);
+      n.m.__leader.setAttribute("y2", cy);
+    }
+    document.querySelectorAll("#inset .inset-dot").forEach((m) => {
+      const off = m.classList.contains("hidden");
+      for (const k of ["__pin", "__leader", "__label"]) m[k].classList.toggle("hidden", off);
+    });
+  }
+
+  function placeDot(d, x, y, rad) {
+    if (d.tagName === "rect") {
+      const s = rad * 1.7;
+      d.setAttribute("x", x - s / 2); d.setAttribute("y", y - s / 2);
+      d.setAttribute("width", s); d.setAttribute("height", s);
+      d.setAttribute("transform", `rotate(45 ${x} ${y})`);
+    } else {
+      d.setAttribute("cx", x); d.setAttribute("cy", y); d.setAttribute("r", rad);
+    }
   }
 
   function stateRecord(code) {
@@ -111,7 +233,7 @@
     document.querySelectorAll("#map .state").forEach((p) => {
       const r = stateRecord(p.__code);
       const v = r ? metricValue(r) : null;
-      if (v == null) { p.classList.add("nodata"); p.style.fill = ""; }
+      if (v == null) { p.classList.add("nodata"); p.style.fill = "var(--nodata)"; }
       else { p.classList.remove("nodata"); p.style.fill = `var(${SEQ[binIndex(v)]})`; }
     });
 
@@ -124,19 +246,12 @@
       const rad = v == null ? 3.5 : 3.5 + 11 * Math.sqrt(Math.max(v, 0) / dmax);
       d.__r = rad;
       d.style.fillOpacity = v == null ? "0.25" : "";
-      const [x, y] = d.__xy;
-      if (d.tagName === "rect") {
-        const s = rad * 1.7;
-        d.setAttribute("x", x - s / 2); d.setAttribute("y", y - s / 2);
-        d.setAttribute("width", s); d.setAttribute("height", s);
-        d.setAttribute("transform", `rotate(45 ${x} ${y})`);
-      } else {
-        d.setAttribute("r", rad);
-      }
+      if (d.__xy) placeDot(d, d.__xy[0], d.__xy[1], rad);
     });
     // big first so small dots stay clickable on top
     const g = $("#dots");
-    dots.sort((a, b) => b.__r - a.__r).forEach((d) => g.append(d));
+    dots.filter((d) => d.__xy).sort((a, b) => b.__r - a.__r).forEach((d) => g.append(d));
+    layoutInset();
     drawLegend();
   }
 
@@ -185,8 +300,8 @@
     if (!r) return;
     if (r.placeholder) showPlaceholder(r);
     else select(r.id);
-    // single-column layout: the panel sits below the map, so bring it into view
-    if (window.matchMedia("(max-width: 860px)").matches) $("#panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // the panel sits below the full-width map, so bring it into view if it's off screen
+    $("#panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   // ---------- panel ----------
@@ -197,7 +312,7 @@
     if (!r) return;
     const code = r.kind === "state" ? r.state : (r.id === "city-washington-dc" ? "DC" : null);
     if (code) document.querySelector(`#map .state[data-code="${code}"]`)?.classList.add("sel");
-    document.querySelector(`#map .dot[data-id="${CSS.escape(id)}"]`)?.classList.add("sel");
+    document.querySelectorAll(`#map .dot[data-id="${CSS.escape(id)}"]`).forEach((d) => d.classList.add("sel"));
     const row = document.querySelector(`#table tr[data-id="${CSS.escape(id)}"]`);
     if (row) { row.classList.add("sel"); if (scrollRow) row.scrollIntoView({ block: "nearest" }); }
     renderPanel(r);
@@ -306,7 +421,7 @@
     document.querySelectorAll("[data-layer]").forEach((c) => c.addEventListener("change", () => {
       const layer = c.dataset.layer;
       const sel = layer === "cities" ? ".dot.city" : layer === "issuers" ? ".dot.issuer" : null;
-      if (sel) document.querySelectorAll("#map " + sel).forEach((d) => d.classList.toggle("hidden", !c.checked));
+      if (sel) { document.querySelectorAll("#map " + sel).forEach((d) => d.classList.toggle("hidden", !c.checked)); layoutInset(); }
       if (layer === "states") paintStatesLayer(c.checked);
     }));
     $("#search").addEventListener("input", renderTable);
@@ -329,7 +444,7 @@
 
   function paintStatesLayer(on) {
     if (on) { paint(); return; }
-    document.querySelectorAll("#map .state").forEach((p) => { p.classList.add("nodata"); p.style.fill = ""; });
+    document.querySelectorAll("#map .state").forEach((p) => { p.classList.add("nodata"); p.style.fill = "var(--nodata)"; });
   }
 
   Promise.all([
